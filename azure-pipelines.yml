@@ -1,19 +1,52 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 
-trigger:
-- master
-
 pool:
-  vmImage: ubuntu-latest
+  vmImage: windows-2022
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+# We need to make sure that the time zone on the agent host
+# is set to 'our' time zone otherwise some unit tests will
+# fail because of daylight saving time issues.
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: 'Set-TimeZone  "W. Europe Standard Time"'
+
+- task: NuGetToolInstaller@1
+  displayName: 'install nuget tool'
+  inputs:
+    versionSpec: 
+
+- task: NuGetAuthenticate@1
+  displayName: 'configure nuget tools to authenticate with azure artifacts'
+
+- task: NuGetCommand@2
+  displayName: 'nuget restore'
+  inputs:
+    command: 'restore'
+    restoreSolution: 'BulkOperations.sln'
+    feedsToUse: 'config'
+
+- task: DotNetCoreCLI@2
+  displayName: 'build solution'
+  inputs:
+    command: 'build'
+    arguments: '--configuration Release'
+
+- task: CopyFiles@2
+  inputs:
+    Contents: |
+      **/Marketmath.BulkOperations*.nupkg
+      **/Marketmath.BulkOperations*.snupkg
+    TargetFolder: $(build.artifactstagingdirectory)
+    flattenFolders: true
+    preserveTimestamp: true
+    
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(build.artifactstagingdirectory)'
+    artifact: drop
+    publishLocation: 'pipeline'
